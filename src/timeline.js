@@ -1,5 +1,6 @@
 // timeline.js — drag/drop, cut, trim, snap, zoom
 import { getState, setState, patchIn, uid, toast, undo, redo } from './state.js';
+import { computePeaks, drawWaveform, getCachedPeaks } from './waveform.js';
 
 let drag = null;       // { mode, clipId, originTrack, originStart, startX, originalIn, originalOut }
 let razor = false;
@@ -130,6 +131,32 @@ function snap(t, excludeClipId) {
   }
   // Playhead
   tryBetter(s.playhead);
+  // BPM beats: if a bpm cache exists for the dragged clip's media, snap to nearest beat
+  if (excludeClipId) {
+    const dragged = (() => {
+      for (const k of Object.keys(s.timeline.tracks)) {
+        const c = s.timeline.tracks[k].find((x) => x.id === excludeClipId);
+        if (c) return c;
+      }
+      return null;
+    })();
+    if (dragged && dragged._bpmBeats) {
+      // Beats are sorted; binary search for nearest
+      const beats = dragged._bpmBeats;
+      let lo = 0, hi = beats.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (beats[mid] < t) lo = mid + 1; else hi = mid;
+      }
+      const candidates = [beats[lo]];
+      if (lo > 0) candidates.push(beats[lo - 1]);
+      for (const b of candidates) {
+        if (b == null) continue;
+        const d = Math.abs(b - t);
+        if (d < magnetSec && d < bestDist) { best = b; bestDist = d; }
+      }
+    }
+  }
   return Math.max(0, best);
 }
 
@@ -286,7 +313,20 @@ export function renderTimeline() {
       cv.width = 200; cv.height = 30;
       wave.appendChild(cv);
       el.appendChild(wave);
-      drawWave(cv, c, s);
+
+      // Render waveform for audio clips (and video clips that have audio)
+      const media = s.media.find((m) => m.id === c.mediaId);
+      if (media) {
+        const peaks = getCachedPeaks(media.id);
+        const dur = media.duration || (c.outPoint - c.inPoint);
+        // Schedule canvas size after layout
+        requestAnimationFrame(() => drawWaveform(cv, peaks, c.inPoint, c.outPoint, dur));
+        if (!peaks && (media.kind === 'audio' || media.kind === 'video')) {
+          computePeaks(media).then((p) => {
+            if (p) requestAnimationFrame(() => drawWaveform(cv, p, c.inPoint, c.outPoint, dur));
+          });
+        }
+      }
 
       if (c.fx?.length) {
         const fx = document.createElement('div');

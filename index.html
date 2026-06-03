@@ -202,6 +202,21 @@
       <button data-effect="eye-distort">Eye Distort</button>
       <button data-effect="liquid-face">Liquid Face</button>
       <span class="ytp-sep"></span>
+      <button id="btn-detect-bpm" title="Analyze active media's audio and snap clips to its beat">🎵 Detect BPM</button>
+      <span class="ytp-sep"></span>
+      <span class="ytp-label">PRESETS</span>
+      <select id="preset-select" title="Apply a YTP effect chain to the selected clip">
+        <option value="">— pick a preset —</option>
+        <option value="spadinner">Spadinner</option>
+        <option value="bill-cipher">Bill Cipher</option>
+        <option value="bowser">Bowser</option>
+        <option value="mlg">MLG</option>
+        <option value="spongebob">Spongebob 2hr Later</option>
+        <option value="deepfried">Deep Fried</option>
+        <option value="goblin">Goblin Mode</option>
+        <option value="sans">Sans</option>
+      </select>
+      <span class="ytp-sep"></span>
       <span class="ytp-label">CHAOS</span>
       <button data-effect="random" id="btn-random-fx" title="Add a random effect (30% chance)">🎲 Random</button>
       <button data-effect="ytpify" id="btn-ytpify" title="Apply a random YTP effect chain">💥 YTP-ify</button>
@@ -289,6 +304,7 @@
           <input id="ex-br" type="number" min="1" max="40" value="8" />
         </label>
         <button class="primary block top" id="btn-do-export">Render → WebM</button>
+        <button class="block top" id="btn-cancel-export" style="display:none;">Cancel</button>
         <div class="progress" id="ex-progress"><div></div></div>
         <div class="hint" id="ex-status">Idle.</div>
         <div class="hint mono" id="ex-eta" style="color:#7af;font-size:11px;">Ready.</div>

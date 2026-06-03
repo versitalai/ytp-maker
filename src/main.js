@@ -7,9 +7,11 @@ import { initTimeline, renderTimeline } from './timeline.js';
 import { initRender, togglePlay } from './render.js';
 import { startMixer } from './audio.js';
 import { initAutosave } from './autosave.js';
+import { applyPreset } from './ytp.js';
+import { detectBpm, getBpm } from './bpm.js';
 import { listMemes, memeToMedia, makeMemeBlob } from './memes.js';
 import { publishCurrent, forkProject, listCommunity } from './community.js';
-import { exportProject } from './export.js';
+import { exportProject, cancelExport } from './export.js';
 
 // =====================================================================
 //  UI helpers
@@ -455,6 +457,62 @@ function init() {
   const fi = $('#file-input');
   if (fi) fi.addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
 
+  // Preset selector — applies a named YTP effect chain to the selected clip
+  const ps = $('#preset-select');
+  if (ps) ps.addEventListener('change', (e) => {
+    const key = e.target.value;
+    if (!key) return;
+    const s = getState();
+    const id = s.selectedClipId;
+    if (!id) { toast('Select a clip first'); e.target.value = ''; return; }
+    setState((st) => {
+      const tracks = { ...st.timeline.tracks };
+      for (const k of Object.keys(tracks)) {
+        const idx = tracks[k].findIndex((c) => c.id === id);
+        if (idx >= 0) {
+          const newArr = tracks[k].slice();
+          newArr[idx] = applyPreset(newArr[idx], key);
+          tracks[k] = newArr;
+          break;
+        }
+      }
+      return { ...st, timeline: { ...st.timeline, tracks } };
+    });
+    toast('✨ Preset: ' + key);
+    e.target.value = '';
+  });
+
+  // BPM detection button — analyzes active media audio
+  const btnBpm = $('#btn-detect-bpm');
+  if (btnBpm) btnBpm.addEventListener('click', async () => {
+    const s = getState();
+    const m = s.media.find((x) => x.id === s.activeMediaId);
+    if (!m) { toast('Select a media item first'); return; }
+    btnBpm.disabled = true;
+    const oldText = btnBpm.textContent;
+    btnBpm.textContent = '🎵 Analyzing…';
+    const data = await detectBpm(m);
+    btnBpm.disabled = false;
+    btnBpm.textContent = oldText;
+    if (data) {
+      // Attach beat list to every clip on the timeline that uses this media
+      setState((st) => {
+        const tracks = { ...st.timeline.tracks };
+        for (const k of Object.keys(tracks)) {
+          for (let i = 0; i < tracks[k].length; i++) {
+            if (tracks[k][i].mediaId === m.id) {
+              tracks[k] = tracks[k].slice();
+              tracks[k][i] = { ...tracks[k][i], _bpmBeats: data.beats };
+            }
+          }
+        }
+        return { ...st, timeline: { ...st.timeline, tracks } };
+      });
+      toast(`🎵 ${data.bpm} BPM detected (${Math.round(data.confidence * 100)}% confidence). Clips snap to beats.`);
+    }
+  });
+
+
   // Body-wide drag/drop overlay
   const dropOverlay = document.createElement('div');
   dropOverlay.id = 'drop-overlay';
@@ -563,7 +621,18 @@ function init() {
     toast('Project saved');
   });
   $('#btn-export').addEventListener('click', () => $$('[data-tab="export"]').forEach((t) => t.click()));
-  $('#btn-do-export').addEventListener('click', exportProject);
+  $('#btn-do-export').addEventListener('click', async () => {
+    const go = $('#btn-do-export');
+    const cancel = $('#btn-cancel-export');
+    go.style.display = 'none';
+    cancel.style.display = '';
+    try { await exportProject(); }
+    finally {
+      go.style.display = '';
+      cancel.style.display = 'none';
+    }
+  });
+  $('#btn-cancel-export').addEventListener('click', () => cancelExport());
 
   // Global toggle-play
   window.addEventListener('ytp:toggle-play', () => togglePlay());

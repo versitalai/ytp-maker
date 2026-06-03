@@ -331,6 +331,14 @@ label > input[type="range"] { width: 100%; }
 .track[data-track="V1"] .track-head::before { background: var(--blue); }
 .track[data-track="A1"] .track-head::before { background: var(--green); }
 .track[data-track="A2"] .track-head::before { background: var(--accent); }
+.track[data-track="M"] .track-head::before { background: #f5d060; }
+
+/* Color-coded clip backgrounds per track */
+.track[data-track="V1"] .clip { background: linear-gradient(180deg, #1a3050 0%, #0e1f30 100%); border-color: #2a5070; color: #b0d4f5; }
+.track[data-track="V2"] .clip { background: linear-gradient(180deg, #2a1a4a 0%, #1a0e30 100%); border-color: #5030a0; color: #d0b0f5; }
+.track[data-track="A1"] .clip { background: linear-gradient(180deg, #1a4a2a 0%, #0e2a14 100%); border-color: #2a7040; color: #b0f5c4; }
+.track[data-track="A2"] .clip { background: linear-gradient(180deg, #4a2a1a 0%, #2a1408 100%); border-color: #7a4a20; color: #f5c890; }
+.track[data-track="M"] .clip { background: linear-gradient(180deg, #4a3a14 0%, #2a2208 100%); border-color: #7a6020; color: #f5dca0; }
 
 .track-body {
   position: relative; height: 56px; min-width: 100%;

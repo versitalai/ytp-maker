@@ -258,7 +258,54 @@ export function randomFx(clip) {
   return { ...clip, fx };
 }
 
-// YTP-ify: applies 2–4 effects in sequence, biased toward chaos combos.
+// =====================================================================
+//  PRESETS — named YTP effect chains
+// =====================================================================
+// Each preset is a list of effect kinds applied in order. Inspired by
+// classic YTP video creator styles / character tropes.
+export const PRESETS = {
+  'spadinner': {
+    label: 'Spadinner (Discord mod)',
+    chain: ['loop-word', 'infinite-zoom', 'stutter', 'rev-every-other', 'mouth-warp', 'eye-distort'],
+  },
+  'bill-cipher': {
+    label: 'Bill Cipher (Gravity Falls)',
+    chain: ['infinite-zoom', 'eye-distort', 'stutter', 'liquid-face', 'rev-video', 'loop-frame'],
+  },
+  'bowser': {
+    label: 'Bowser (Mario rage)',
+    chain: ['stutter', 'stutter', 'mouth-warp', 'infinite-zoom', 'rev-audio'],
+  },
+  'mlg': {
+    label: 'MLG (MountainDew)',
+    chain: ['stutter', 'rev-audio', 'loop-sentence', 'eye-distort'],
+  },
+  'spongebob': {
+    label: 'Spongebob 2 Hours Later',
+    chain: ['loop-sentence', 'infinite-zoom', 'loop-word'],
+  },
+  'deepfried': {
+    label: 'Deep Fried',
+    chain: ['eye-distort', 'mouth-warp', 'liquid-face', 'infinite-zoom', 'stutter'],
+  },
+  'goblin': {
+    label: 'Goblin Mode',
+    chain: ['rev-every-other', 'loop-frame', 'stutter', 'mouth-warp', 'infinite-zoom'],
+  },
+  'sans': {
+    label: 'Sans (Undertale)',
+    chain: ['infinite-zoom', 'rev-video', 'stutter', 'eye-distort', 'loop-word'],
+  },
+};
+
+// Apply a named preset to a clip (replaces its FX stack).
+export function applyPreset(clip, presetKey) {
+  const preset = PRESETS[presetKey];
+  if (!preset) return clip;
+  const fx = preset.chain.map((kind) => ({ kind, seed: Math.random() }));
+  return { ...clip, fx };
+}
+
 export function ytpify(clip) {
   const presets = [
     ['stutter', 'mouth-warp', 'rev-audio'],

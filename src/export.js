@@ -1,5 +1,15 @@
-// export.js — Render the canvas to a WebM file using MediaRecorder
+// export.js — Render the canvas to a WebM file using MediaRecorder.
+// Frame pacing is offloaded to export-worker.js so the main thread can
+// yield to UI updates between frames.
 import { getState, toast } from './state.js';
+
+let _pacingWorker = null;
+let _cancelFlag = false;
+
+export function cancelExport() {
+  _cancelFlag = true;
+  if (_pacingWorker) { _pacingWorker.postMessage({ type: 'cancel' }); _pacingWorker.terminate(); _pacingWorker = null; }
+}
 
 export async function exportProject() {
   const s = getState();
@@ -24,33 +34,41 @@ export async function exportProject() {
   const done = new Promise((res) => (rec.onstop = res));
   rec.start();
 
-  // step through timeline at real speed
   const end = computeEnd();
-  const stepMs = 1000 / fps;
-  const tStart = performance.now();
-  for (let t = 0; t <= end; t += 1 / fps) {
-    setPlayhead(t, true);
-    const pct = end > 0 ? (t / end * 100) : 100;
-    document.getElementById('ex-status').textContent = `Rendering ${pct.toFixed(1)}%`;
-    document.querySelector('#ex-progress > div').style.width = pct + '%';
-    // ETA: extrapolate from elapsed / completed ratio
-    if (t > 0.5) {
-      const elapsedMs = performance.now() - tStart;
-      const totalMs = elapsedMs * (end / t);
-      const remainingMs = Math.max(0, totalMs - elapsedMs);
-      const eta = formatMs(remainingMs);
-      const speedFactor = t / ((performance.now() - tStart) / 1000);
-      const etaEl = document.getElementById('ex-eta');
-      if (etaEl) etaEl.textContent = `${pct.toFixed(0)}% • ETA ${eta} • ${speedFactor.toFixed(2)}× realtime`;
-    }
-    await new Promise((r) => setTimeout(r, stepMs));
+  _cancelFlag = false;
+
+  // Spawn pacing worker (relative to this module URL, must be at the same
+  // origin; works in GitHub Pages because the file is in /src/)
+  try {
+    _pacingWorker = new Worker(new URL('./export-worker.js', import.meta.url));
+  } catch (e) {
+    // Some embedders (jsdom, file://) block Worker — fall back to main-thread loop
+    _pacingWorker = null;
   }
+
+  if (_pacingWorker) {
+    await runWithWorker(_pacingWorker, end, fps);
+  } else {
+    await runOnMainThread(end, fps);
+  }
+
+  if (_cancelFlag) {
+    rec.stop();
+    await done.catch(() => {});
+    canvas.width = orig[0]; canvas.height = orig[1];
+    setPlayhead(0, false);
+    toast('Export cancelled');
+    if (_pacingWorker) { _pacingWorker.terminate(); _pacingWorker = null; }
+    return;
+  }
+
   rec.stop();
   await done;
 
   // restore
   canvas.width = orig[0]; canvas.height = orig[1];
   setPlayhead(0, false);
+  if (_pacingWorker) { _pacingWorker.terminate(); _pacingWorker = null; }
 
   const blob = new Blob(chunks, { type: 'video/webm' });
   const url = URL.createObjectURL(blob);
@@ -61,6 +79,64 @@ export async function exportProject() {
   // Revoke the URL after a short delay so the download has time to start
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
   toast('Export complete');
+}
+
+function runWithWorker(worker, end, fps) {
+  return new Promise((resolve) => {
+    let frame = 0;
+    let drift = 0;
+    let startTs = performance.now();
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'tick') {
+        if (_cancelFlag) { resolve(); return; }
+        const t = m.frame;
+        setPlayhead(t, true);
+        const pct = end > 0 ? (t / end * 100) : 100;
+        document.getElementById('ex-status').textContent = `Rendering ${pct.toFixed(1)}%`;
+        document.querySelector('#ex-progress > div').style.width = pct + '%';
+        // Track drift so the worker can compensate
+        drift = performance.now() - startTs - (t * 1000 / fps);
+        worker.postMessage({ type: 'progress', frame: t + 1 / fps, drift });
+        if (t >= end) resolve();
+      } else if (m.type === 'eta') {
+        const etaEl = document.getElementById('ex-eta');
+        if (etaEl) etaEl.textContent = `${((m.frame / end) * 100).toFixed(0)}% • ETA ${formatMs(m.etaMs)} • ${m.speedFactor.toFixed(2)}× realtime`;
+      } else if (m.type === 'done') {
+        resolve();
+      }
+    };
+    startTs = performance.now();
+    worker.postMessage({ type: 'start', fps, end });
+  });
+}
+
+function runOnMainThread(end, fps) {
+  return new Promise((resolve) => {
+    const stepMs = 1000 / fps;
+    const tStart = performance.now();
+    (function loop() {
+      let t = 0;
+      const tick = () => {
+        if (_cancelFlag || t > end) { resolve(); return; }
+        setPlayhead(t, true);
+        const pct = end > 0 ? (t / end * 100) : 100;
+        document.getElementById('ex-status').textContent = `Rendering ${pct.toFixed(1)}%`;
+        document.querySelector('#ex-progress > div').style.width = pct + '%';
+        if (t > 0.5) {
+          const elapsedMs = performance.now() - tStart;
+          const totalMs = elapsedMs * (end / t);
+          const remainingMs = Math.max(0, totalMs - elapsedMs);
+          const speedFactor = t / ((performance.now() - tStart) / 1000);
+          const etaEl = document.getElementById('ex-eta');
+          if (etaEl) etaEl.textContent = `${pct.toFixed(0)}% • ETA ${formatMs(remainingMs)} • ${speedFactor.toFixed(2)}× realtime`;
+        }
+        t += 1 / fps;
+        setTimeout(tick, stepMs);
+      };
+      tick();
+    })();
+  });
 }
 
 function setPlayhead(t, playing) {
