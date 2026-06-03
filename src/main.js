@@ -367,6 +367,99 @@ function init() {
     $$('[data-cl]').forEach((el) => el.value = ({ e:0, c:0, s:1, h:0, g:1 })[el.dataset.cl]);
   });
 
+  // ----- File picker + drag/drop + YouTube fetch -----
+  function handleFiles(fileList) {
+    if (!fileList) return;
+    const files = [...fileList].filter((f) => /^(video|audio)\//.test(f.type) || /\.(mp4|webm|mov|m4v|mp3|wav|ogg|m4a|aac|flac)$/i.test(f.name));
+    if (!files.length) { toast('No video/audio files found'); return; }
+    for (const f of files) addFile(f);
+    toast(`Loading ${files.length} file${files.length > 1 ? 's' : ''}…`);
+  }
+  const fi = $('#file-input');
+  if (fi) fi.addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
+
+  // Body-wide drag/drop overlay
+  const dropOverlay = document.createElement('div');
+  dropOverlay.id = 'drop-overlay';
+  dropOverlay.innerHTML = '<div class="big">Drop video / audio</div><div class="sm">or click + Add File in the Media panel</div>';
+  Object.assign(dropOverlay.style, {
+    position: 'fixed', inset: '0', display: 'none', zIndex: '9999',
+    background: 'rgba(0,0,0,0.78)',
+    alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'column', gap: '10px',
+    pointerEvents: 'none', textAlign: 'center',
+    color: 'var(--accent, #e8a04a)', fontFamily: 'var(--mono, monospace)',
+  });
+  dropOverlay.querySelector('.big').style.fontSize = '32px';
+  dropOverlay.querySelector('.sm').style.fontSize = '14px';
+  dropOverlay.querySelector('.sm').style.opacity = '0.7';
+  document.body.appendChild(dropOverlay);
+
+  let dragDepth = 0;
+  window.addEventListener('dragenter', (e) => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault();
+    dragDepth++;
+    dropOverlay.style.display = 'flex';
+  });
+  window.addEventListener('dragover', (e) => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+  });
+  window.addEventListener('dragleave', (e) => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dropOverlay.style.display = 'none';
+  });
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    dropOverlay.style.display = 'none';
+    handleFiles(e.dataTransfer?.files);
+  });
+
+  // YouTube fetch
+  const ytBtn = $('#btn-yt');
+  const ytInput = $('#yt-url');
+  if (ytBtn && ytInput) {
+    const doFetch = async () => {
+      const url = ytInput.value.trim();
+      if (!url) { toast('Paste a YouTube URL first'); return; }
+      ytBtn.disabled = true;
+      const prev = ytBtn.textContent;
+      ytBtn.textContent = 'Fetching…';
+      try {
+        const media = await fetchYouTube(url);
+        ytInput.value = '';
+        toast(`Loaded "${media.name}" (${media.duration.toFixed(1)}s)`);
+      } catch (err) {
+        console.error('YT fetch failed', err);
+        toast('YT fetch failed: ' + (err.message || err));
+      } finally {
+        ytBtn.disabled = false;
+        ytBtn.textContent = prev;
+      }
+    };
+    ytBtn.addEventListener('click', doFetch);
+    ytInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doFetch(); });
+  }
+
+  // Record button
+  const recBtn = $('#btn-record');
+  if (recBtn) {
+    recBtn.addEventListener('click', async () => {
+      try {
+        recBtn.disabled = true;
+        await startRecording();
+        toast('Recording added to bin');
+      } catch (err) {
+        toast('Recording failed: ' + (err.message || err));
+      } finally {
+        recBtn.disabled = false;
+      }
+    });
+  }
+
   // Captions toggle
   $('#btn-captions')?.addEventListener('click', () => {
     setState((s) => ({ ...s, captionsOn: !s.captionsOn }), { skipHistory: true });
