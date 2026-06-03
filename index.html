@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>YTP Maker — Browser Editor</title>
+<link rel="stylesheet" href="styles/main.css" />
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+<script>
+  window.__errs = [];
+  window.addEventListener('error', (e) => window.__errs.push({ msg: e.message, src: e.filename, line: e.lineno, col: e.colno, stk: (e.error && e.error.stack || '').slice(0, 400) }));
+  window.addEventListener('unhandledrejection', (e) => window.__errs.push({ rej: String(e.reason), stk: (e.reason && e.reason.stack || '').slice(0, 400) }));
+</script>
+</head>
+<body class="app">
+
+<!-- ===================== TOP BAR ===================== -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">▶▶</span>
+    <span class="brand-name">YTP<span class="brand-dot">·</span>MAKER</span>
+    <span class="brand-ver">v0.1.0</span>
+  </div>
+  <div class="topbar-menu">
+    <button data-menu="File">File</button>
+    <button data-menu="Edit">Edit</button>
+    <button data-menu="Clip">Clip</button>
+    <button data-menu="Effects">Effects</button>
+    <button data-menu="YTP">YTP</button>
+    <button data-menu="Community">Community</button>
+  </div>
+  <div class="topbar-right">
+    <span class="tc" id="tc-current">00:00:00:00</span>
+    <span class="tc-sep">/</span>
+    <span class="tc dim" id="tc-total">00:00:00:00</span>
+    <button class="ghost" id="btn-save">Save</button>
+    <button class="primary" id="btn-export">Export</button>
+    <button class="ghost" id="btn-help" title="Keyboard shortcuts">?</button>
+  </div>
+</header>
+
+<!-- ===================== HELP MODAL ===================== -->
+<dialog id="help-modal">
+  <h3>Keyboard Shortcuts</h3>
+  <table>
+    <tr><td><kbd>Space</kbd> / <kbd>K</kbd></td><td>Play / Pause</td></tr>
+    <tr><td><kbd>J</kbd> / <kbd>L</kbd></td><td>Rewind / Forward 5s</td></tr>
+    <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Frame step</td></tr>
+    <tr><td><kbd>I</kbd> / <kbd>O</kbd></td><td>Mark in / Mark out</td></tr>
+    <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>Undo / Redo</td></tr>
+    <tr><td><kbd>Ctrl+S</kbd></td><td>Save project</td></tr>
+    <tr><td><kbd>Del</kbd></td><td>Delete selected clip</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Toggle captions</td></tr>
+  </table>
+  <h4>YTP Effects</h4>
+  <p>Select a clip first, then click any effect (Stutter, Loop, Reverse, Mouth Warp…). Effects stack on the clip and can be combined.</p>
+  <h4>YouTube</h4>
+  <p>Paste any YouTube URL into the MEDIA panel. Uses the Piped API (open-source, no key required). Works without a backend.</p>
+  <form method="dialog"><button class="primary">Close</button></form>
+</dialog>
+
+<!-- ===================== MAIN ===================== -->
+<main class="workspace">
+
+  <!-- ============ LEFT: MEDIA POOL + TRANSCRIPT ============ -->
+  <aside class="panel left">
+    <div class="panel-tabs" data-tabs="left">
+      <button class="active" data-tab="media">Media</button>
+      <button data-tab="script">Script</button>
+      <button data-tab="memes">Memes</button>
+      <button data-tab="community">Community</button>
+    </div>
+
+    <!-- Media Pool -->
+    <section class="tab-pane active" data-pane="media">
+      <div class="section">
+        <h4>SOURCE</h4>
+        <div class="row gap">
+          <input id="yt-url" type="text" placeholder="YouTube URL (browser-only, Piped)" />
+          <button class="primary" id="btn-yt">Fetch</button>
+        </div>
+        <div class="row gap top">
+          <label class="file-btn">
+            <input type="file" id="file-input" accept="video/*,audio/*" hidden />
+            <span>+ Add File</span>
+          </label>
+          <button class="ghost" id="btn-record">● Record</button>
+        </div>
+        <div class="hint" id="media-hint">Drop files anywhere or paste a YouTube link.</div>
+      </div>
+
+      <div class="section grow">
+        <h4>BIN <span class="count" id="bin-count">0</span></h4>
+        <ul class="bin" id="bin"></ul>
+      </div>
+    </section>
+
+    <!-- Transcript / Auto Sentence Chopper -->
+    <section class="tab-pane" data-pane="script">
+      <div class="section">
+        <h4>AUTO SENTENCE CHOPPER</h4>
+        <div class="row gap">
+          <button class="primary" id="btn-detect" disabled>Detect Words</button>
+          <span class="hint inline" id="detect-status">no clip selected</span>
+        </div>
+        <div class="opts row top gap">
+          <label><input type="checkbox" id="opt-sentences" checked /> Sentences</label>
+          <label><input type="checkbox" id="opt-words" checked /> Words</label>
+          <label><input type="checkbox" id="opt-phonemes" /> Phonemes</label>
+        </div>
+      </div>
+      <div class="section grow" id="transcript">
+        <div class="empty">Detect words on a clip to chop & rearrange.</div>
+      </div>
+      <div class="section">
+        <button class="ghost block" id="btn-bake-script">Bake selection into timeline</button>
+      </div>
+    </section>
+
+    <!-- Memes / Soundboard -->
+    <section class="tab-pane" data-pane="memes">
+      <div class="section">
+        <h4>MEME INJECTOR</h4>
+        <input type="search" id="meme-search" placeholder="Search memes…" />
+      </div>
+      <div class="section grow meme-grid" id="meme-grid"></div>
+    </section>
+
+    <!-- Community -->
+    <section class="tab-pane" data-pane="community">
+      <div class="section">
+        <h4>COMMUNITY CLIP LIBRARY</h4>
+        <div class="row gap">
+          <input id="comm-search" type="search" placeholder="character / meme / phrase" />
+        </div>
+        <div class="row top gap">
+          <button class="primary block" id="btn-publish">Publish current project</button>
+        </div>
+      </div>
+      <div class="section grow">
+        <ul class="bin" id="comm-list"></ul>
+      </div>
+      <div class="section">
+        <h4>REMIX MODE</h4>
+        <div class="hint">Open a community project → Fork → Modify → Republish.</div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ============ CENTER: VIEWER + YTP TOOLS ============ -->
+  <section class="center">
+    <div class="viewer">
+      <canvas id="preview" width="1280" height="720"></canvas>
+      <div class="viewer-overlay" id="viewer-overlay">
+        <div class="big-msg">Drop a video here</div>
+      </div>
+      <div class="viewer-fallback" id="viewer-fallback">
+        <video id="vid" playsinline crossorigin="anonymous"></video>
+        <audio id="aud"></audio>
+      </div>
+    </div>
+
+    <!-- Transport -->
+    <div class="transport">
+      <button class="t-btn" id="t-rew" title="Jump -5s">⏮</button>
+      <button class="t-btn" id="t-back" title="Frame back">⏪</button>
+      <button class="t-btn big" id="t-play" title="Play / Pause">▶</button>
+      <button class="t-btn" id="t-fwd" title="Frame fwd">⏩</button>
+      <button class="t-btn" id="t-end" title="Jump +5s">⏭</button>
+      <span class="t-sep"></span>
+      <button class="t-btn" id="t-mark-in" title="Set In">[</button>
+      <button class="t-btn" id="t-mark-out" title="Set Out">]</button>
+      <span class="t-sep"></span>
+      <select id="t-speed" title="Speed">
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </div>
+
+    <!-- YTP Quick Effects -->
+    <div class="ytp-bar">
+      <span class="ytp-label">REPEAT</span>
+      <button data-effect="stutter">Stutter</button>
+      <button data-effect="loop-sentence">Sentence Loop</button>
+      <button data-effect="loop-word">Word Loop</button>
+      <button data-effect="loop-frame">Frame Loop</button>
+      <button data-effect="infinite-zoom">∞ Zoom</button>
+      <span class="ytp-sep"></span>
+      <span class="ytp-label">REVERSE</span>
+      <button data-effect="rev-audio">Rev Audio</button>
+      <button data-effect="rev-video">Rev Video</button>
+      <button data-effect="rev-every-other">Rev Every Other Word</button>
+      <span class="ytp-sep"></span>
+      <span class="ytp-label">FACE</span>
+      <button data-effect="mouth-warp">Mouth Warp</button>
+      <button data-effect="eye-distort">Eye Distort</button>
+      <button data-effect="liquid-face">Liquid Face</button>
+      <span class="ytp-sep"></span>
+      <span class="ytp-label">CHOP</span>
+      <button data-effect="chop-words">Chop to Words</button>
+    </div>
+  </section>
+
+  <!-- ============ RIGHT: INSPECTOR ============ -->
+  <aside class="panel right">
+    <div class="panel-tabs" data-tabs="right">
+      <button class="active" data-tab="inspector">Inspector</button>
+      <button data-tab="audio">Audio</button>
+      <button data-tab="color">Color</button>
+      <button data-tab="export">Export</button>
+    </div>
+
+    <section class="tab-pane active" data-pane="inspector">
+      <div class="section">
+        <h4>CLIP</h4>
+        <div class="kv"><span>Name</span><span id="i-name">—</span></div>
+        <div class="kv"><span>Source</span><span id="i-src">—</span></div>
+        <div class="kv"><span>Duration</span><span id="i-dur">—</span></div>
+        <div class="kv"><span>In / Out</span><span id="i-inout">—</span></div>
+      </div>
+      <div class="section">
+        <h4>TRANSFORM</h4>
+        <label>Position X<input type="range" min="-1" max="1" step="0.01" value="0" data-tr="x" /></label>
+        <label>Position Y<input type="range" min="-1" max="1" step="0.01" value="0" data-tr="y" /></label>
+        <label>Scale<input type="range" min="0.1" max="4" step="0.01" value="1" data-tr="s" /></label>
+        <label>Rotation<input type="range" min="-180" max="180" step="1" value="0" data-tr="r" /></label>
+        <label>Opacity<input type="range" min="0" max="1" step="0.01" value="1" data-tr="o" /></label>
+        <label>Volume<input type="range" min="0" max="2" step="0.01" value="1" data-tr="v" /></label>
+        <label>Pitch<input type="range" min="-12" max="12" step="0.1" value="0" data-tr="p" /></label>
+      </div>
+      <div class="section">
+        <h4>YTP STACK</h4>
+        <ul class="fx-stack" id="fx-stack"><li class="empty">No effects</li></ul>
+        <button class="ghost block top" id="btn-clear-fx">Clear FX on clip</button>
+        <button class="ghost block top" id="btn-captions">Toggle Captions (C)</button>
+      </div>
+    </section>
+
+    <section class="tab-pane" data-pane="audio">
+      <div class="section">
+        <h4>FAIRLIGHT-LITE</h4>
+        <label>Master Gain<input type="range" min="0" max="2" step="0.01" value="1" id="audio-gain" /></label>
+        <label>Low Cut<input type="range" min="0" max="1000" step="10" value="20" id="audio-lc" /></label>
+        <label>High Cut<input type="range" min="2000" max="22050" step="100" value="22050" id="audio-hc" /></label>
+      </div>
+    </section>
+
+    <section class="tab-pane" data-pane="color">
+      <div class="section">
+        <h4>COLOR</h4>
+        <label>Exposure<input type="range" min="-2" max="2" step="0.01" value="0" data-cl="e" /></label>
+        <label>Contrast<input type="range" min="-1" max="1" step="0.01" value="0" data-cl="c" /></label>
+        <label>Saturation<input type="range" min="0" max="2" step="0.01" value="1" data-cl="s" /></label>
+        <label>Hue<input type="range" min="-180" max="180" step="1" value="0" data-cl="h" /></label>
+        <label>Gamma<input type="range" min="0.1" max="3" step="0.01" value="1" data-cl="g" /></label>
+        <div class="row gap top">
+          <button class="ghost block" id="btn-color-reset">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-pane" data-pane="export">
+      <div class="section">
+        <h4>DELIVER</h4>
+        <label>Resolution
+          <select id="ex-res">
+            <option>1280×720</option>
+            <option>1920×1080</option>
+            <option>854×480</option>
+            <option>640×360</option>
+          </select>
+        </label>
+        <label>FPS
+          <select id="ex-fps">
+            <option>24</option><option selected>30</option><option>60</option>
+          </select>
+        </label>
+        <label>Bitrate (Mbps)
+          <input id="ex-br" type="number" min="1" max="40" value="8" />
+        </label>
+        <button class="primary block top" id="btn-do-export">Render → WebM</button>
+        <div class="progress" id="ex-progress"><div></div></div>
+        <div class="hint" id="ex-status">Idle.</div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<!-- ===================== TIMELINE ===================== -->
+<div class="timeline-wrap" id="timeline-wrap">
+  <div class="tl-toolbar">
+    <button id="tl-cut" title="Razor">✂</button>
+    <button id="tl-snap" class="on" title="Snap">🧲</button>
+    <button id="tl-zoom-in">+</button>
+    <button id="tl-zoom-out">−</button>
+    <span class="tc" id="tl-tc">00:00:00:00</span>
+    <span class="hint" id="tl-hint">Drop clips onto tracks. Drag edges to trim. Drag body to move. Razor cuts. ⌘/Ctrl+Z undo.</span>
+  </div>
+  <div class="timeline" id="timeline">
+    <div class="ruler" id="ruler"></div>
+    <div class="tracks" id="tracks">
+      <div class="track" data-track="V2"><div class="track-head">V2</div><div class="track-body" data-body="V2"></div></div>
+      <div class="track" data-track="V1"><div class="track-head">V1</div><div class="track-body" data-body="V1"></div></div>
+      <div class="track" data-track="A1"><div class="track-head">A1</div><div class="track-body" data-body="A1"></div></div>
+      <div class="track" data-track="A2"><div class="track-head">A2</div><div class="track-body" data-body="A2"></div></div>
+    </div>
+    <div class="playhead" id="playhead"></div>
+  </div>
+</div>
+
+<!-- ===================== DRAG GHOST ===================== -->
+<div class="drag-ghost" id="drag-ghost"></div>
+
+<!-- ===================== TOAST ===================== -->
+<div class="toast" id="toast"></div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
