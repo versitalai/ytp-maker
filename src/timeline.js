@@ -17,8 +17,13 @@ export function initTimeline() {
     toast(razor ? 'Razor ON — click clip body to cut' : 'Razor OFF');
   });
   document.getElementById('tl-snap').addEventListener('click', () => {
-    setState((s) => ({ ...s, timeline: { ...s.timeline, snap: !s.timeline.snap } }));
+    setState((st) => ({ ...st, timeline: { ...st.timeline, snap: !st.timeline.snap } }));
     document.getElementById('tl-snap').classList.toggle('on', getState().timeline.snap);
+  });
+  document.getElementById('toggle-beat-grid').addEventListener('click', () => {
+    setState((st) => ({ ...st, timeline: { ...st.timeline, beatGrid: !st.timeline.beatGrid } }));
+    document.getElementById('toggle-beat-grid').classList.toggle('on', getState().timeline.beatGrid);
+    renderTimeline();
   });
   document.getElementById('tl-zoom-in').addEventListener('click', () => zoomBy(1.25));
   document.getElementById('tl-zoom-out').addEventListener('click', () => zoomBy(0.8));
@@ -290,7 +295,10 @@ export function renderTimeline() {
   }
 
   // tracks
-  for (const key of ['V2', 'V1', 'A1', 'A2']) {
+  renderBeatGrid(width, z, s);
+
+  // tracks
+  for (const key of ['V2', 'V1', 'A1', 'A2', 'M']) {
     const body = document.querySelector(`.track-body[data-body="${key}"]`);
     if (!body) continue;
     body.style.width = width + 'px';
@@ -393,4 +401,34 @@ function formatTC(t, fps = 30, withFrames = true) {
   const ff = Math.floor((t % 1) * fps);
   const pad = (n, w = 2) => String(n).padStart(w, '0');
   return `${pad(hh)}:${pad(mm)}:${pad(ss)}${withFrames ? ':' + pad(ff) : ''}`;
+}
+
+// Render the beat-grid overlay. Looks up the first clip on the timeline
+// with attached _bpmBeats, then draws one vertical line per beat inside
+// the visible timeline width. Every 4th beat is colored as a "downbeat".
+function renderBeatGrid(width, zoom, state) {
+  const grid = document.getElementById('beat-grid');
+  if (!grid) return;
+  if (!state.timeline.beatGrid) { grid.innerHTML = ''; return; }
+  // Find any clip with _bpmBeats
+  let beats = null;
+  for (const k of Object.keys(state.timeline.tracks)) {
+    for (const c of state.timeline.tracks[k]) {
+      if (c._bpmBeats && c._bpmBeats.length) { beats = c._bpmBeats; break; }
+    }
+    if (beats) break;
+  }
+  if (!beats) { grid.innerHTML = ''; return; }
+  grid.style.width = width + 'px';
+  grid.innerHTML = '';
+  const maxX = width;
+  // beats[] is in seconds. Draw only those within the visible window.
+  for (let i = 0; i < beats.length; i++) {
+    const x = beats[i] * zoom;
+    if (x < -10 || x > maxX + 10) continue;
+    const line = document.createElement('div');
+    line.className = 'beat-line' + (i % 4 === 0 ? ' downbeat' : '');
+    line.style.left = x + 'px';
+    grid.appendChild(line);
+  }
 }

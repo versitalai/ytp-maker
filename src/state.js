@@ -17,8 +17,9 @@ const initial = {
   timeline: {
     zoom: 60,         // px per second
     snap: true,
+    beatGrid: false,  // toggle: show vertical lines at detected beat positions
     tracks: {
-      V2: [], V1: [], A1: [], A2: [],
+      V2: [], V1: [], A1: [], A2: [], M: [],
     },
   },
   playhead: 0,        // seconds

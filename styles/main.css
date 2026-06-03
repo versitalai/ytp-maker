@@ -232,9 +232,27 @@ label > input[type="range"] { width: 100%; }
 .fx-stack li .fx-name { color: var(--accent); flex: 1; }
 .fx-stack li button { border: none; padding: 0 4px; color: var(--text-mute); }
 .fx-stack li button:hover { color: var(--red); }
+.fx-stack li { display: flex; align-items: center; gap: 4px; }
+.fx-stack li.dragging { opacity: 0.4; }
+.fx-stack li.drop-target { box-shadow: inset 0 0 0 2px var(--accent); }
+.fx-stack li .fx-grip { color: var(--text-mute); cursor: grab; padding: 0 4px; user-select: none; }
+.fx-stack li .fx-grip:active { cursor: grabbing; }
+.fx-stack li .fx-name { flex: 1; }
+.fx-stack li .fx-up, .fx-stack li .fx-down { font-size: 9px; }
+.fx-stack li .fx-toggle { color: var(--accent); }
+.fx-stack li .fx-toggle:hover { color: var(--accent); opacity: 0.7; }
 
-.progress { height: 4px; background: var(--bg-2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
-.progress > div { height: 100%; background: var(--accent); width: 0; transition: 80ms; }
+.progress { height: 6px; background: var(--bg-3); border-radius: 3px; overflow: hidden; margin: 6px 0; }
+.progress > div { height: 100%; background: linear-gradient(90deg, var(--accent), #f6c44d); width: 0%; transition: width 0.1s linear; }
+.queue-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 12px; margin: 6px 0; }
+.queue-presets label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.queue-list { list-style: none; padding: 0; margin: 8px 0 0 0; font-size: 12px; max-height: 200px; overflow-y: auto; }
+.queue-list li { padding: 4px 6px; border-bottom: 1px solid var(--line-2); display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.queue-list li.running { color: var(--accent); }
+.queue-list li.done { color: #6fa; }
+.queue-list li.failed { color: #f66; }
+.queue-list li a { color: var(--accent); text-decoration: none; }
+.queue-list li a:hover { text-decoration: underline; }
 
 /* ============== CENTER ============== */
 .center {
@@ -319,6 +337,22 @@ label > input[type="range"] { width: 100%; }
 .ruler .tick.major { border-left-color: #4a505c; }
 
 .tracks { position: relative; }
+.beat-grid {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  pointer-events: none;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(245,166,35,0.06) 0%, transparent 100%);
+}
+.beat-grid .beat-line {
+  position: absolute;
+  top: 0;
+  bottom: -1000px; /* extend down over tracks */
+  width: 1px;
+  background: rgba(245,166,35,0.18);
+}
+.beat-grid .beat-line.downbeat { background: rgba(245,90,35,0.45); width: 2px; }
 .track { display: grid; grid-template-columns: 56px 1fr; border-bottom: var(--hairline); }
 .track-head {
   background: var(--bg-2); border-right: var(--hairline);

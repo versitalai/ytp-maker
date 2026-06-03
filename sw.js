@@ -1,5 +1,5 @@
 // Cache app shell for offline use. YouTube/Piped requests always go to network.
-const CACHE = 'ytp-maker-v4';
+const CACHE = 'ytp-maker-v5';
 const SHELL = [
   './',
   './index.html',

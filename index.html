@@ -202,7 +202,7 @@
       <button data-effect="eye-distort">Eye Distort</button>
       <button data-effect="liquid-face">Liquid Face</button>
       <span class="ytp-sep"></span>
-      <button id="btn-detect-bpm" title="Analyze active media's audio and snap clips to its beat">🎵 Detect BPM</button>
+      <button id="btn-detect-bpm" title="Analyze active media's audio and snap clips to its beat (Shift+click: all audio tracks)">🎵 Detect BPM</button>
       <span class="ytp-sep"></span>
       <span class="ytp-label">PRESETS</span>
       <select id="preset-select" title="Apply a YTP effect chain to the selected clip">
@@ -305,6 +305,23 @@
         </label>
         <button class="primary block top" id="btn-do-export">Render → WebM</button>
         <button class="block top" id="btn-cancel-export" style="display:none;">Cancel</button>
+        <h4 style="margin-top:14px;">RENDER QUEUE</h4>
+        <p class="hint" style="margin:4px 0;">Render the project under multiple preset chains in a row. Each variant exports as a separate WebM file.</p>
+        <div class="queue-presets" id="queue-presets">
+          <label><input type="checkbox" data-preset="Spadinner" checked> Spadinner</label>
+          <label><input type="checkbox" data-preset="Bill Cipher"> Bill Cipher</label>
+          <label><input type="checkbox" data-preset="Bowser" checked> Bowser</label>
+          <label><input type="checkbox" data-preset="MLG"> MLG</label>
+          <label><input type="checkbox" data-preset="Spongebob 2hr Later"> Spongebob 2hr Later</label>
+          <label><input type="checkbox" data-preset="Deep Fried"> Deep Fried</label>
+          <label><input type="checkbox" data-preset="Goblin Mode"> Goblin Mode</label>
+          <label><input type="checkbox" data-preset="Sans"> Sans</label>
+          <label><input type="checkbox" data-preset="ORIGINAL" checked> Original (no preset)</label>
+        </div>
+        <button class="block top" id="btn-queue-render">Render Queue</button>
+        <button class="block top" id="btn-queue-cancel" style="display:none;">Cancel Queue</button>
+        <ul class="queue-list" id="queue-list"></ul>
+        <h4 style="margin-top:14px;">Progress</h4>
         <div class="progress" id="ex-progress"><div></div></div>
         <div class="hint" id="ex-status">Idle.</div>
         <div class="hint mono" id="ex-eta" style="color:#7af;font-size:11px;">Ready.</div>
@@ -318,6 +335,7 @@
   <div class="tl-toolbar">
     <button id="tl-cut" title="Razor">✂</button>
     <button id="tl-snap" class="on" title="Snap">🧲</button>
+    <button id="toggle-beat-grid" title="Show vertical lines at detected beat positions">🎼</button>
     <button id="tl-zoom-in">+</button>
     <button id="tl-zoom-out">−</button>
     <span class="tc" id="tl-tc">00:00:00:00</span>
@@ -325,6 +343,7 @@
   </div>
   <div class="timeline" id="timeline">
     <div class="ruler" id="ruler"></div>
+    <div class="beat-grid" id="beat-grid"></div>
     <div class="tracks" id="tracks">
       <div class="track" data-track="V2"><div class="track-head">V2</div><div class="track-body" data-body="V2"></div></div>
       <div class="track" data-track="V1"><div class="track-head">V1</div><div class="track-body" data-body="V1"></div></div>

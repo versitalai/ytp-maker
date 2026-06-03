@@ -8,10 +8,11 @@ import { initRender, togglePlay } from './render.js';
 import { startMixer } from './audio.js';
 import { initAutosave } from './autosave.js';
 import { applyPreset } from './ytp.js';
-import { detectBpm, getBpm } from './bpm.js';
+import { detectBpm, detectBpmMulti, getBpm } from './bpm.js';
 import { listMemes, memeToMedia, makeMemeBlob } from './memes.js';
 import { publishCurrent, forkProject, listCommunity } from './community.js';
 import { exportProject, cancelExport } from './export.js';
+import { runQueue, cancelQueue } from './queue.js';
 
 // =====================================================================
 //  UI helpers
@@ -217,17 +218,77 @@ function renderInspector() {
   });
   const fx = $('#fx-stack');
   fx.innerHTML = '';
-  if (!clip.fx.length) { fx.innerHTML = `<li class="empty">No effects</li>`; }
+  if (!clip.fx.length) { fx.innerHTML = `<li class="empty">No effects — pick one below to start the chain</li>`; }
   else clip.fx.forEach((f, i) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="fx-name">${f.kind.toUpperCase()}</span><button data-rm="${i}">×</button>`;
+    li.dataset.idx = i;
+    li.draggable = true;
+    li.innerHTML = `
+      <span class="fx-grip" title="Drag to reorder">≡</span>
+      <span class="fx-name">${f.kind.toUpperCase()}</span>
+      <button class="fx-toggle" title="Enable / disable" data-toggle="${i}">${f.disabled ? '○' : '●'}</button>
+      <button class="fx-up" title="Move up" data-up="${i}">▲</button>
+      <button class="fx-down" title="Move down" data-down="${i}">▼</button>
+      <button data-rm="${i}" title="Remove">×</button>`;
     fx.appendChild(li);
   });
+  // Drag-to-reorder
+  let dragSrc = null;
+  fx.querySelectorAll('li[draggable]').forEach((li) => {
+    li.addEventListener('dragstart', (e) => {
+      dragSrc = parseInt(li.dataset.idx);
+      li.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(dragSrc));
+    });
+    li.addEventListener('dragend', () => { li.classList.remove('dragging'); dragSrc = null; });
+    li.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; li.classList.add('drop-target'); });
+    li.addEventListener('dragleave', () => li.classList.remove('drop-target'));
+    li.addEventListener('drop', (e) => {
+      e.preventDefault();
+      li.classList.remove('drop-target');
+      const src = parseInt(e.dataTransfer.getData('text/plain'));
+      const dst = parseInt(li.dataset.idx);
+      if (Number.isNaN(src) || src === dst) return;
+      const newFx = clip.fx.slice();
+      const [moved] = newFx.splice(src, 1);
+      newFx.splice(dst, 0, moved);
+      const updated = { ...clip, fx: newFx };
+      setState((st) => mutateClipInTracks(st, updated));
+    });
+  });
+  // Up / down / remove / toggle
   fx.querySelectorAll('button[data-rm]').forEach((b) => {
     b.addEventListener('click', () => {
       const i = parseInt(b.dataset.rm);
       const updated = { ...clip, fx: clip.fx.filter((_, j) => j !== i) };
       setState((st) => mutateClipInTracks(st, updated));
+    });
+  });
+  fx.querySelectorAll('button[data-up]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const i = parseInt(b.dataset.up);
+      if (i === 0) return;
+      const newFx = clip.fx.slice();
+      [newFx[i-1], newFx[i]] = [newFx[i], newFx[i-1]];
+      setState((st) => mutateClipInTracks(st, { ...clip, fx: newFx }));
+    });
+  });
+  fx.querySelectorAll('button[data-down]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const i = parseInt(b.dataset.down);
+      if (i === clip.fx.length - 1) return;
+      const newFx = clip.fx.slice();
+      [newFx[i+1], newFx[i]] = [newFx[i], newFx[i+1]];
+      setState((st) => mutateClipInTracks(st, { ...clip, fx: newFx }));
+    });
+  });
+  fx.querySelectorAll('button[data-toggle]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const i = parseInt(b.dataset.toggle);
+      const newFx = clip.fx.slice();
+      newFx[i] = { ...newFx[i], disabled: !newFx[i].disabled };
+      setState((st) => mutateClipInTracks(st, { ...clip, fx: newFx }));
     });
   });
 }
@@ -482,25 +543,34 @@ function init() {
     e.target.value = '';
   });
 
-  // BPM detection button — analyzes active media audio
+  // BPM detection button — analyzes active media audio (shift-click: all audio tracks)
   const btnBpm = $('#btn-detect-bpm');
-  if (btnBpm) btnBpm.addEventListener('click', async () => {
+  if (btnBpm) btnBpm.addEventListener('click', async (e) => {
     const s = getState();
-    const m = s.media.find((x) => x.id === s.activeMediaId);
-    if (!m) { toast('Select a media item first'); return; }
     btnBpm.disabled = true;
     const oldText = btnBpm.textContent;
     btnBpm.textContent = '🎵 Analyzing…';
-    const data = await detectBpm(m);
+    let data = null;
+    if (e.shiftKey) {
+      // Multi-track: every audio + video media
+      const candidates = s.media.filter((m) => (m.kind === 'audio' || m.kind === 'video') && m.url);
+      if (!candidates.length) { toast('No audio tracks to analyze'); btnBpm.disabled = false; btnBpm.textContent = oldText; return; }
+      data = await detectBpmMulti(candidates);
+    } else {
+      const m = s.media.find((x) => x.id === s.activeMediaId);
+      if (!m) { toast('Select a media item first (or shift-click for all tracks)'); btnBpm.disabled = false; btnBpm.textContent = oldText; return; }
+      data = await detectBpm(m);
+    }
     btnBpm.disabled = false;
     btnBpm.textContent = oldText;
     if (data) {
-      // Attach beat list to every clip on the timeline that uses this media
+      // Attach beat list to every clip on the timeline that uses any detected source
+      const targetIds = data.sourceMediaId ? [data.sourceMediaId] : s.media.map((m) => m.id);
       setState((st) => {
         const tracks = { ...st.timeline.tracks };
         for (const k of Object.keys(tracks)) {
           for (let i = 0; i < tracks[k].length; i++) {
-            if (tracks[k][i].mediaId === m.id) {
+            if (targetIds.includes(tracks[k][i].mediaId)) {
               tracks[k] = tracks[k].slice();
               tracks[k][i] = { ...tracks[k][i], _bpmBeats: data.beats };
             }
@@ -508,7 +578,11 @@ function init() {
         }
         return { ...st, timeline: { ...st.timeline, tracks } };
       });
-      toast(`🎵 ${data.bpm} BPM detected (${Math.round(data.confidence * 100)}% confidence). Clips snap to beats.`);
+      const src = data.sourceName ? ` from "${data.sourceName}"` : '';
+      toast(`🎵 ${data.bpm} BPM${src} (${Math.round(data.confidence * 100)}% confidence). Clips snap to beats.`);
+      // Toggle beat grid on by default after a successful detection
+      const bg = $('#toggle-beat-grid');
+      if (bg && !bg.classList.contains('on')) bg.click();
     }
   });
 
@@ -633,6 +707,14 @@ function init() {
     }
   });
   $('#btn-cancel-export').addEventListener('click', () => cancelExport());
+
+  // Render queue — batch export under multiple preset chains
+  $('#btn-queue-render').addEventListener('click', () => {
+    const checked = Array.from(document.querySelectorAll('#queue-presets input:checked')).map((el) => el.dataset.preset);
+    if (!checked.length) { toast('Pick at least one preset'); return; }
+    runQueue(checked);
+  });
+  $('#btn-queue-cancel').addEventListener('click', () => cancelQueue());
 
   // Global toggle-play
   window.addEventListener('ytp:toggle-play', () => togglePlay());

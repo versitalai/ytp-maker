@@ -12,6 +12,18 @@ export function cancelExport() {
 }
 
 export async function exportProject() {
+  const _result = { ok: false, url: null, size: 0 };
+  try {
+    return await _exportProjectInner();
+  } catch (e) {
+    toast('Export failed: ' + (e?.message || e));
+    console.error('export failed:', e);
+    exportError(e);
+    return _result;
+  }
+}
+
+async function _exportProjectInner() {
   const s = getState();
   const [w, h] = (document.getElementById('ex-res').value || '1280×720').split('×').map(Number);
   const fps = parseInt(document.getElementById('ex-fps').value);
@@ -79,6 +91,13 @@ export async function exportProject() {
   // Revoke the URL after a short delay so the download has time to start
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
   toast('Export complete');
+  // Notify the render queue (if running). Detail carries the blob URL + size
+  // so the queue can attach a download link without re-reading the blob.
+  window.dispatchEvent(new CustomEvent('ytp-export-complete', { detail: { url, size: blob.size, name: a.download } }));
+}
+
+function exportError(err) {
+  window.dispatchEvent(new CustomEvent('ytp-export-error', { detail: { message: err?.message || String(err) } }));
 }
 
 function runWithWorker(worker, end, fps) {

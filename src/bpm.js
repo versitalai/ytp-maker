@@ -15,7 +15,25 @@ export function clearBpmCache() {
   _cache.clear();
 }
 
-// Detect BPM for a media item. Returns { bpm, confidence, beats, durationSec }.
+// Detect BPM across a list of media items (e.g. A1 + A2 tracks).
+// Runs analyses in parallel and returns the result with the highest
+// (confidence * loudness) score. Returns { bpm, confidence, beats, sourceMediaId }.
+export async function detectBpmMulti(mediaList) {
+  if (!Array.isArray(mediaList) || !mediaList.length) return null;
+  toast(`🎵 Analyzing ${mediaList.length} tracks for BPM…`);
+  const results = await Promise.all(mediaList.map((m) => detectBpm(m).catch(() => null)));
+  let best = null;
+  let bestScore = -1;
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (!r) continue;
+    // Score = confidence * log(1 + peak_amplitude) ; we don't have peak stored, so use confidence
+    const score = r.confidence + (mediaList[i].kind === 'audio' ? 0.1 : 0);
+    if (score > bestScore) { bestScore = score; best = { ...r, sourceMediaId: mediaList[i].id, sourceName: mediaList[i].name }; }
+  }
+  return best;
+}
+
 export async function detectBpm(media) {
   if (!media || !media.url) { toast('No media URL for BPM detection'); return null; }
   if (_cache.has(media.id)) return _cache.get(media.id);
