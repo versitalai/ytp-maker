@@ -1,11 +1,12 @@
 // main.js — entrypoint, glues UI to modules
 import { getState, setState, subscribe, undo, redo, toast, patchIn } from './state.js';
 import { addFile, fetchYouTube, startRecording } from './media.js';
-import { activeMedia, detectForActive, bakeSelectedToTimeline, getTranscript, wordToPhonemes } from './transcript.js';
-import { FX, applyEffect, clearEffectsOnSelected } from './ytp.js';
+import { activeMedia, detectForActive, bakeSelectedToTimeline, getTranscript, wordToPhonemes, chopBySilence } from './transcript.js';
+import { FX, applyEffect, clearEffectsOnSelected, randomFx as _randomFx, ytpify as _ytpify } from './ytp.js';
 import { initTimeline, renderTimeline } from './timeline.js';
 import { initRender, togglePlay } from './render.js';
 import { startMixer } from './audio.js';
+import { initAutosave } from './autosave.js';
 import { listMemes, memeToMedia, makeMemeBlob } from './memes.js';
 import { publishCurrent, forkProject, listCommunity } from './community.js';
 import { exportProject } from './export.js';
@@ -55,11 +56,19 @@ function renderBin() {
         <div class="name">${escape(m.name)}</div>
         <div class="meta">${m.kind} · ${m.duration.toFixed(1)}s</div>
       </div>
-      <div class="meta">${m.id === s.activeMediaId ? '●' : ''}</div>
+      <div class="meta" style="display:flex;gap:6px;align-items:center;">
+        <span>${m.id === s.activeMediaId ? '●' : ''}</span>
+        <button class="x" data-rm-media="${m.id}" title="Remove from bin">✕</button>
+      </div>
     `;
-    li.addEventListener('click', () => {
+    li.addEventListener('click', (e) => {
+      if (e.target.closest('[data-rm-media]')) return; // ignore clicks on delete
       setState((st) => ({ ...st, activeMediaId: m.id }));
       $('#detect-status').textContent = m.name;
+    });
+    li.querySelector('[data-rm-media]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeMediaFromBin(m.id);
     });
     li.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('application/x-ytp', JSON.stringify({
@@ -68,6 +77,30 @@ function renderBin() {
     });
     ul.appendChild(li);
   });
+}
+
+// Revoke the ObjectURL for a media item and remove from bin state.
+function removeMediaFromBin(id) {
+  const s = getState();
+  const m = s.media.find((x) => x.id === id);
+  if (m) {
+    // Revoke any object URLs to free memory
+    try { if (m.url && m.url.startsWith('blob:')) URL.revokeObjectURL(m.url); } catch (_) {}
+    try { if (m.thumb && m.thumb.startsWith('blob:')) URL.revokeObjectURL(m.thumb); } catch (_) {}
+  }
+  setState((st) => ({
+    ...st,
+    media: st.media.filter((x) => x.id !== id),
+    // Also drop any clips on the timeline that referenced this media
+    timeline: {
+      ...st.timeline,
+      tracks: Object.fromEntries(
+        Object.entries(st.timeline.tracks).map(([k, arr]) => [k, arr.filter((c) => c.mediaId !== id)])
+      ),
+    },
+    activeMediaId: st.activeMediaId === id ? null : st.activeMediaId,
+  }));
+  toast('Removed media from bin');
 }
 
 // =====================================================================
@@ -209,6 +242,42 @@ function mutateClipInTracks(state, clip) {
   return { ...state, timeline: { ...state.timeline, tracks } };
 }
 
+// 🎲 Random FX: 30% chance to add a fresh random effect to the selected clip.
+function applyRandomFx() {
+  const s = getState();
+  const sel = s.selectedClipId;
+  if (!sel) { toast('Select a clip first'); return; }
+  let clip = null;
+  for (const k of Object.keys(s.timeline.tracks)) {
+    clip = s.timeline.tracks[k].find((c) => c.id === sel);
+    if (clip) break;
+  }
+  if (!clip) return;
+  const updated = _randomFx(clip);
+  setState((st) => mutateClipInTracks(st, updated));
+  if (updated.fx.length > clip.fx.length) {
+    toast(`🎲 Added: ${updated.fx[updated.fx.length - 1].kind}`);
+  } else {
+    toast('🎲 No effect added this roll (try again)');
+  }
+}
+
+// 💥 YTP-ify: nuke the FX stack and apply a random YTP effect chain.
+function applyYtpify() {
+  const s = getState();
+  const sel = s.selectedClipId;
+  if (!sel) { toast('Select a clip first'); return; }
+  let clip = null;
+  for (const k of Object.keys(s.timeline.tracks)) {
+    clip = s.timeline.tracks[k].find((c) => c.id === sel);
+    if (clip) break;
+  }
+  if (!clip) return;
+  const updated = _ytpify(clip);
+  setState((st) => mutateClipInTracks(st, updated));
+  toast(`💥 YTP-ified! Chain: ${updated.fx.map((f) => f.kind).join(' + ')}`);
+}
+
 // =====================================================================
 //  Community
 // =====================================================================
@@ -319,10 +388,18 @@ function init() {
       bakeSelectedToTimeline(indices);
     }
   });
+  $('#btn-chop-silence')?.addEventListener('click', () => chopBySilence());
 
   // YTP effect buttons
   $$('.ytp-bar [data-effect]').forEach((b) => {
-    b.addEventListener('click', () => applyEffect(b.dataset.effect));
+    const kind = b.dataset.effect;
+    if (kind === 'random') {
+      b.addEventListener('click', () => applyRandomFx());
+    } else if (kind === 'ytpify') {
+      b.addEventListener('click', () => applyYtpify());
+    } else {
+      b.addEventListener('click', () => applyEffect(kind));
+    }
   });
   $('#btn-clear-fx').addEventListener('click', clearEffectsOnSelected);
 
@@ -533,6 +610,7 @@ function init() {
   initTimeline();
   initRender();
   startMixer();
+  initAutosave();
 }
 
 window.addEventListener('DOMContentLoaded', init);

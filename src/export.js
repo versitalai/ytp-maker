@@ -27,10 +27,22 @@ export async function exportProject() {
   // step through timeline at real speed
   const end = computeEnd();
   const stepMs = 1000 / fps;
+  const tStart = performance.now();
   for (let t = 0; t <= end; t += 1 / fps) {
     setPlayhead(t, true);
-    document.getElementById('ex-status').textContent = `Rendering ${(t / end * 100).toFixed(1)}%`;
-    document.querySelector('#ex-progress > div').style.width = (t / end * 100) + '%';
+    const pct = end > 0 ? (t / end * 100) : 100;
+    document.getElementById('ex-status').textContent = `Rendering ${pct.toFixed(1)}%`;
+    document.querySelector('#ex-progress > div').style.width = pct + '%';
+    // ETA: extrapolate from elapsed / completed ratio
+    if (t > 0.5) {
+      const elapsedMs = performance.now() - tStart;
+      const totalMs = elapsedMs * (end / t);
+      const remainingMs = Math.max(0, totalMs - elapsedMs);
+      const eta = formatMs(remainingMs);
+      const speedFactor = t / ((performance.now() - tStart) / 1000);
+      const etaEl = document.getElementById('ex-eta');
+      if (etaEl) etaEl.textContent = `${pct.toFixed(0)}% • ETA ${eta} • ${speedFactor.toFixed(2)}× realtime`;
+    }
     await new Promise((r) => setTimeout(r, stepMs));
   }
   rec.stop();
@@ -41,10 +53,13 @@ export async function exportProject() {
   setPlayhead(0, false);
 
   const blob = new Blob(chunks, { type: 'video/webm' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = (s.project.name || 'ytp') + '.webm';
   a.click();
+  // Revoke the URL after a short delay so the download has time to start
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
   toast('Export complete');
 }
 
@@ -61,4 +76,14 @@ function computeEnd() {
     for (const c of s.timeline.tracks[k]) max = Math.max(max, c.start + (c.outPoint - c.inPoint));
   }
   return max;
+}
+
+function formatMs(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  if (m < 60) return `${m}m${r.toString().padStart(2, '0')}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h${(m % 60).toString().padStart(2, '0')}m`;
 }

@@ -56,6 +56,17 @@ button.primary:hover { background: var(--accent-2); border-color: var(--accent-2
 button.ghost { border-color: var(--line); color: var(--text-dim); }
 button.on { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
 button.block { width: 100%; }
+button.x {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.2;
+  border-radius: 3px;
+  cursor: pointer;
+}
+button.x:hover { background: #7a2a2a; color: #fff; border-color: #7a2a2a; }
 
 input, select, textarea {
   font: inherit; color: var(--text); background: var(--bg-2);

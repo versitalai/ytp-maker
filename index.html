@@ -108,6 +108,10 @@
           <label><input type="checkbox" id="opt-words" checked /> Words</label>
           <label><input type="checkbox" id="opt-phonemes" /> Phonemes</label>
         </div>
+        <div class="row top gap">
+          <button class="ghost" id="btn-chop-silence" title="Detect silence boundaries and bake each chunk as a clip">🔪 Auto-chop by silence</button>
+          <span class="hint inline">uses VAD</span>
+        </div>
       </div>
       <div class="section grow" id="transcript">
         <div class="empty">Detect words on a clip to chop & rearrange.</div>
@@ -198,6 +202,10 @@
       <button data-effect="eye-distort">Eye Distort</button>
       <button data-effect="liquid-face">Liquid Face</button>
       <span class="ytp-sep"></span>
+      <span class="ytp-label">CHAOS</span>
+      <button data-effect="random" id="btn-random-fx" title="Add a random effect (30% chance)">🎲 Random</button>
+      <button data-effect="ytpify" id="btn-ytpify" title="Apply a random YTP effect chain">💥 YTP-ify</button>
+      <span class="ytp-sep"></span>
       <span class="ytp-label">CHOP</span>
       <button data-effect="chop-words">Chop to Words</button>
     </div>
@@ -283,6 +291,7 @@
         <button class="primary block top" id="btn-do-export">Render → WebM</button>
         <div class="progress" id="ex-progress"><div></div></div>
         <div class="hint" id="ex-status">Idle.</div>
+        <div class="hint mono" id="ex-eta" style="color:#7af;font-size:11px;">Ready.</div>
       </div>
     </section>
   </aside>

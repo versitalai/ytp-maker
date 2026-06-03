@@ -210,6 +210,26 @@ export function vadChunk(media, opts = {}) {
   });
 }
 
+// ----- Auto-chop by silence: detect silence boundaries, bake as clips
+export async function chopBySilence(mediaIdOrNull, opts = {}) {
+  const { minSilenceMs = 200, minChunkMs = 250, threshold = 0.015 } = opts;
+  const s = getState();
+  const media = mediaIdOrNull
+    ? s.media.find((m) => m.id === mediaIdOrNull)
+    : s.activeMediaId
+      ? s.media.find((m) => m.id === s.activeMediaId)
+      : s.media[0];
+  if (!media) { toast('No media to chop'); return; }
+  toast('🔪 Detecting silence…');
+  const result = await vadChunk(media, { minSilenceMs, silenceThreshold: threshold, minChunkMs });
+  if (!result) { toast('Silence detection failed'); return; }
+  const words = result.words;
+  if (!words.length) { toast('No words found — try a higher threshold'); return; }
+  // Bake all detected words as separate clips
+  bakeSelectedToTimeline(media.id, words.map((_, i) => i));
+  toast(`🔪 Chopped into ${words.length} word-clip(s)`);
+}
+
 // ----- Active media transcript glue -----------------------------------
 export function getTranscript(mediaId) {
   return getState().transcript?.[mediaId] || null;

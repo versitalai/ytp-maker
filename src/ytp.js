@@ -221,3 +221,59 @@ export function audioRate(seg) {
   if (seg.speed && seg.speed < 0) return -1;
   return 1;
 }
+
+// =====================================================================
+//   CHAOS ENGINE — 🎲 Random FX + 💥 YTP-ify
+// =====================================================================
+
+// All non-mutually-destructive effect kinds (skip chop-words which
+// replaces the clip, skip the rev-every-other which is heavy).
+const RANDOM_FX_KINDS = [
+  'stutter',
+  'loop-sentence',
+  'loop-word',
+  'loop-frame',
+  'infinite-zoom',
+  'rev-audio',
+  'rev-video',
+  'mouth-warp',
+  'eye-distort',
+  'liquid-face',
+];
+
+// Weighted rare-fx roll (each fx has a small chance of being added)
+export function randomFx(clip) {
+  const fx = (clip.fx || []).filter((f) => f.kind !== 'random');
+  const kinds = new Set(fx.map((f) => f.kind));
+  // 30% chance of adding a fresh random effect
+  if (Math.random() < 0.3) {
+    let pick;
+    let attempts = 0;
+    do {
+      pick = RANDOM_FX_KINDS[Math.floor(Math.random() * RANDOM_FX_KINDS.length)];
+      attempts++;
+    } while (kinds.has(pick) && attempts < 6);
+    fx.push({ kind: pick, seed: Math.random() });
+  }
+  return { ...clip, fx };
+}
+
+// YTP-ify: applies 2–4 effects in sequence, biased toward chaos combos.
+export function ytpify(clip) {
+  const presets = [
+    ['stutter', 'mouth-warp', 'rev-audio'],
+    ['loop-word', 'infinite-zoom'],
+    ['loop-frame', 'liquid-face', 'rev-video'],
+    ['loop-sentence', 'eye-distort'],
+    ['infinite-zoom', 'stutter', 'rev-video', 'mouth-warp'],
+    ['stutter', 'stutter', 'infinite-zoom'],
+    ['loop-word', 'rev-every-other'],
+    ['eye-distort', 'mouth-warp', 'stutter'],
+    ['loop-sentence', 'infinite-zoom', 'rev-audio'],
+    ['liquid-face', 'stutter', 'loop-word'],
+  ];
+  const choice = presets[Math.floor(Math.random() * presets.length)];
+  const fx = choice.map((kind) => ({ kind, seed: Math.random() }));
+  return { ...clip, fx };
+}
+

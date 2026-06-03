@@ -98,11 +98,39 @@ function zoomBy(k) {
   setState((s) => ({ ...s, timeline: { ...s.timeline, zoom: Math.max(10, Math.min(400, s.timeline.zoom * k)) } }));
 }
 
-function snap(t) {
+// Snap helper: if snap is on, snap `t` (in seconds) to the nearest magnetic target.
+// Targets (in order of priority):
+//   1. Frame grid (always-on, fine)
+//   2. Other clip edges (start/end of any clip on the timeline, excluding the dragged one)
+//   3. Playhead position
+// Returns the snapped t.
+const SNAP_PX = 8; // pixels of magnetic distance (in timeline units → converted)
+function snap(t, excludeClipId) {
   const s = getState();
   if (!s.timeline.snap) return Math.max(0, t);
-  const grid = 1 / s.project.fps;       // snap to frame
-  return Math.max(0, Math.round(t / grid) * grid);
+  // Frame grid is the floor — always-on
+  const grid = 1 / s.project.fps;
+  let best = Math.max(0, Math.round(t / grid) * grid);
+  let bestDist = Math.abs(best - t);
+  // Magnet distance: convert pixels to seconds via zoom (pxPerSec)
+  const pxPerSec = s.timeline.zoom;
+  const magnetSec = SNAP_PX / Math.max(20, pxPerSec);
+  const tryBetter = (target) => {
+    if (target == null) return;
+    const d = Math.abs(target - t);
+    if (d < magnetSec && d < bestDist) { best = target; bestDist = d; }
+  };
+  // Other clip edges
+  for (const k of Object.keys(s.timeline.tracks)) {
+    for (const c of s.timeline.tracks[k]) {
+      if (c.id === excludeClipId) continue;
+      tryBetter(c.start);
+      tryBetter(c.start + (c.outPoint - c.inPoint));
+    }
+  }
+  // Playhead
+  tryBetter(s.playhead);
+  return Math.max(0, best);
 }
 
 function onMouseDown(e) {
@@ -147,7 +175,7 @@ function onMouseMove(e) {
 
   let c = { ...trk[idx] };
   if (drag.mode === 'move') {
-    c.start = Math.max(0, snap(drag.originStart + dt));
+    c.start = Math.max(0, snap(drag.originStart + dt, drag.clipId));
     // Auto-track swap if dropped on different track
     const hovered = document.elementFromPoint(e.clientX, e.clientY)?.closest('.track-body');
     if (hovered && hovered.dataset.body !== drag.track && !c.meme) {
